@@ -1,0 +1,34 @@
+# Binaries
+rssembly
+cmd/rssembly/rssembly
+cmd/migrate/migrate
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Test
+tmp/
+coverage*.out
+coverage*.html
+*.test
+
+# Migration
+*.sql~
+
+# Build
+dist/
