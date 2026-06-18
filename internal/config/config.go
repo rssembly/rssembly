@@ -1,4 +1,4 @@
-package config
+﻿package config
 
 import (
 	"flag"
@@ -26,6 +26,7 @@ type Config struct {
 	RateLimitWindow     time.Duration `env:"RATE_LIMIT_WINDOW"      yaml:"rate_limit_window"      envDefault:"1m"`
 	DefaultPollInterval time.Duration `env:"DEFAULT_POLL_INTERVAL"  yaml:"default_poll_interval"  envDefault:"15m"`
 	LogLevel            string        `env:"LOG_LEVEL"              yaml:"log_level"              envDefault:"info"`
+	EncryptionKey       string        `env:"ENCRYPTION_KEY"          yaml:"encryption_key"`
 	ConfigFile          string        `env:"CONFIG_FILE"            yaml:"-"`
 
 	// Computed.
@@ -34,10 +35,10 @@ type Config struct {
 
 // Load builds a Config by applying sources in priority order:
 //
-//	1. YAML config file (from -config flag or CONFIG_FILE env) — highest
+//	1. YAML config file (from -config flag or CONFIG_FILE env) â€” highest
 //	2. .env file from CWD
 //	3. Shell environment variables
-//	4. Default values (envDefault struct tags) — lowest
+//	4. Default values (envDefault struct tags) â€” lowest
 //
 // Each source fills fields not set by a higher-priority source.
 func Load() (*Config, error) {
@@ -91,7 +92,7 @@ func Load() (*Config, error) {
 }
 
 // mergeNonZero copies non-zero exported fields from src into dst.
-// src is higher priority — its non-zero values overwrite dst.
+// src is higher priority â€” its non-zero values overwrite dst.
 func mergeNonZero(dst, src *Config) {
 	sv := reflect.ValueOf(src).Elem()
 	dv := reflect.ValueOf(dst).Elem()
