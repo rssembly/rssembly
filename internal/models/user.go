@@ -8,7 +8,7 @@ type User struct {
 	Username     string     `json:"username"`
 	Email        string     `json:"email"`
 	PasswordHash string     `json:"-"` // never exposed in API responses
-	IsAdmin      bool       `json:"is_admin"`
+	Scopes       []string   `json:"scopes,omitempty"` // e.g. ["*"] for superadmin
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`

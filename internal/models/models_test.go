@@ -12,7 +12,7 @@ func TestUser_JSONRoundTrip(t *testing.T) {
 		Username:     "testuser",
 		Email:        "test@example.com",
 		PasswordHash: "argon2hash",
-		IsAdmin:      false,
+		Scopes:       []string{"feeds:read"},
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 		DeletedAt:    nil,
@@ -31,6 +31,9 @@ func TestUser_JSONRoundTrip(t *testing.T) {
 	}
 	if decoded.PasswordHash != "" {
 		t.Error("PasswordHash should be omitted from JSON")
+	}
+	if len(decoded.Scopes) != 1 || decoded.Scopes[0] != "feeds:read" {
+		t.Errorf("expected scopes [feeds:read], got %v", decoded.Scopes)
 	}
 }
 
