@@ -1,5 +1,5 @@
 # Binaries
-rssembly
+/rssembly
 cmd/rssembly/rssembly
 cmd/migrate/migrate
 
@@ -29,6 +29,9 @@ coverage*.html
 
 # Migration
 *.sql~
+
+# Plans (working documents, not committed)
+docs/superpowers/plans/
 
 # Build
 dist/
