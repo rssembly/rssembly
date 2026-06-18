@@ -98,49 +98,15 @@ func main() {
 	rl := middleware.NewRateLimiter(cfg.RateLimitRequests, cfg.RateLimitWindow)
 	r.Use(rl.Middleware)
 
-	// Health endpoints (no auth required).
-	healthHandler := handler.NewHealthHandler(db)
-	r.Get("/health", healthHandler.Liveness)
-	r.Get("/ready", healthHandler.Readiness)
-
-	// Metrics (root-level — standard Prometheus scrape path).
-	r.Get("/metrics", telemetry.MetricsHandler().ServeHTTP)
-
-	// ── API v1 ────────────────────────────────────────────────────────
-	r.Route("/api/v1", func(r chi.Router) {
-		// Public endpoints.
-		r.Post("/auth/login", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotImplemented)
-			w.Write([]byte(`{"error":{"code":"not_implemented","message":"login not yet implemented"}}`))
-		})
-		r.Post("/auth/register", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotImplemented)
-			w.Write([]byte(`{"error":{"code":"not_implemented","message":"registration not yet implemented"}}`))
-		})
-
-		// Authenticated endpoints.
-		r.Group(func(r chi.Router) {
-			r.Use(authMiddleware.Middleware)
-
-			r.Get("/feeds", notImplemented)
-			r.Post("/feeds", notImplemented)
-			r.Get("/feeds/{feedID}", notImplemented)
-			r.Put("/feeds/{feedID}", notImplemented)
-			r.Delete("/feeds/{feedID}", notImplemented)
-
-			r.Get("/articles", notImplemented)
-			r.Get("/articles/{articleID}", notImplemented)
-			r.Put("/articles/{articleID}/read-state", notImplemented)
-
-			r.Get("/folders", notImplemented)
-			r.Post("/folders", notImplemented)
-			r.Put("/folders/{folderID}", notImplemented)
-			r.Delete("/folders/{folderID}", notImplemented)
-
-			r.Get("/users/me", notImplemented)
-			r.Put("/users/me", notImplemented)
-		})
-	})
+	// Wire all routes via the dedicated registration function.
+	handler.RegisterRoutes(r, &handler.Handlers{
+		Auth:     handler.NewAuthHandler(),
+		Feeds:    handler.NewFeedHandler(),
+		Articles: handler.NewArticleHandler(),
+		Folders:  handler.NewFolderHandler(),
+		Users:    handler.NewUserHandler(),
+		Health:   handler.NewHealthHandler(db),
+	}, authMiddleware, telemetry.MetricsHandler().ServeHTTP)
 
 	// ── Server ────────────────────────────────────────────────────────
 	srv := &http.Server{
@@ -174,12 +140,6 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("server stopped")
-}
-
-func notImplemented(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"error":{"code":"not_implemented","message":"this endpoint is not yet implemented"}}`))
 }
 
 // compositeAuth implements middleware.AuthenticationHandler by combining JWT
