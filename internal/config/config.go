@@ -17,8 +17,10 @@ type Config struct {
 	DatabaseURL         string        `env:"DATABASE_URL"           yaml:"database_url"`
 	ServerHost          string        `env:"SERVER_HOST"            yaml:"server_host"`
 	ServerPort          int           `env:"SERVER_PORT"            yaml:"server_port"            envDefault:"8080"`
-	JWTPrivateKeyPath   string        `env:"JWT_PRIVATE_KEY_PATH"    yaml:"jwt_private_key_path"`
-	JWTPublicKeyPath    string        `env:"JWT_PUBLIC_KEY_PATH"     yaml:"jwt_public_key_path"`
+	JWTPrivateKey       string        `env:"JWT_PRIVATE_KEY"          yaml:"jwt_private_key"`
+	JWTPublicKey        string        `env:"JWT_PUBLIC_KEY"           yaml:"jwt_public_key"`
+	JWTPrivateKeyPath   string        `env:"JWT_PRIVATE_KEY_PATH"     yaml:"jwt_private_key_path"     envDefault:"./data/jwt_ed25519.pem"`
+	JWTPublicKeyPath    string        `env:"JWT_PUBLIC_KEY_PATH"      yaml:"jwt_public_key_path"      envDefault:"./data/jwt_ed25519.pub"`
 	CORSAllowedOrigins  []string      `env:"CORS_ALLOWED_ORIGINS"   yaml:"cors_allowed_origins"   envSeparator:","`
 	RateLimitRequests   int           `env:"RATE_LIMIT_REQUESTS"    yaml:"rate_limit_requests"    envDefault:"100"`
 	RateLimitWindow     time.Duration `env:"RATE_LIMIT_WINDOW"      yaml:"rate_limit_window"      envDefault:"1m"`
