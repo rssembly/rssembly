@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,12 +14,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 
-	"github.com/RSSembly/rssembly/internal/auth"
-	"github.com/RSSembly/rssembly/internal/config"
-	"github.com/RSSembly/rssembly/internal/database"
-	"github.com/RSSembly/rssembly/internal/handler"
-	"github.com/RSSembly/rssembly/internal/middleware"
-	"github.com/RSSembly/rssembly/internal/telemetry"
+	"github.com/rssembly/rssembly/internal/auth"
+	"github.com/rssembly/rssembly/internal/config"
+	"github.com/rssembly/rssembly/internal/database"
+	"github.com/rssembly/rssembly/internal/handler"
+	"github.com/rssembly/rssembly/internal/middleware"
+	"github.com/rssembly/rssembly/internal/telemetry"
 )
 
 func main() {
@@ -63,19 +64,15 @@ func main() {
 	defer shutdownTelemetry()
 	slog.Info("telemetry initialized")
 
-	// ── Auth ──────────────────────────────────────────────────────────
-	jwtManager, err := auth.NewJWTManager(cfg.JWTPrivateKeyPath, cfg.JWTPublicKeyPath)
+	// ── Auth: JWT Key Resolution ──────────────────────────────────────
+	// Three-tier fallback:
+	//   1. Inline PEM env vars (JWT_PRIVATE_KEY / JWT_PUBLIC_KEY)
+	//   2. PEM files at configured paths
+	//   3. Auto-generate and persist to default paths
+	jwtManager, err := initJWT(cfg)
 	if err != nil {
-		slog.Warn("JWT key pair not found, generating new one", "error", err)
-		if err := auth.GenerateKeyPair(cfg.JWTPrivateKeyPath, cfg.JWTPublicKeyPath); err != nil {
-			slog.Error("failed to generate JWT key pair", "error", err)
-			os.Exit(1)
-		}
-		jwtManager, err = auth.NewJWTManager(cfg.JWTPrivateKeyPath, cfg.JWTPublicKeyPath)
-		if err != nil {
-			slog.Error("failed to load generated JWT keys", "error", err)
-			os.Exit(1)
-		}
+		slog.Error("failed to initialize JWT manager", "error", err)
+		os.Exit(1)
 	}
 	slog.Info("JWT manager initialized")
 
@@ -198,4 +195,61 @@ func (c *compositeAuth) VerifyToken(tokenString string) (*auth.AuthenticatedUser
 
 func (c *compositeAuth) APIKeyLookup(ctx context.Context, prefix, hash string) (*auth.AuthenticatedUser, error) {
 	return c.APIKeyLookupFn(ctx, prefix, hash)
+}
+
+// initJWT resolves JWT signing keys through a three-tier fallback chain.
+func initJWT(cfg *config.Config) (*auth.JWTManager, error) {
+	// Tier 1: Inline PEM from environment variables.
+	if cfg.JWTPrivateKey != "" && cfg.JWTPublicKey != "" {
+		mgr, err := auth.NewJWTManagerFromPEM(
+			[]byte(cfg.JWTPrivateKey),
+			[]byte(cfg.JWTPublicKey),
+		)
+		if err == nil {
+			slog.Info("jwt: using inline PEM from environment variables")
+			return mgr, nil
+		}
+		slog.Warn("jwt: inline PEM env vars present but invalid, falling back", "error", err)
+	}
+
+	// Tier 2: PEM files on disk.
+	if privPEM, err := os.ReadFile(cfg.JWTPrivateKeyPath); err == nil {
+		if pubPEM, err := os.ReadFile(cfg.JWTPublicKeyPath); err == nil {
+			mgr, err := auth.NewJWTManagerFromPEM(privPEM, pubPEM)
+			if err == nil {
+				slog.Info("jwt: loaded keys from files",
+					"private_key", cfg.JWTPrivateKeyPath,
+					"public_key", cfg.JWTPublicKeyPath,
+				)
+				return mgr, nil
+			}
+			slog.Warn("jwt: key files present but invalid, regenerating", "error", err)
+		}
+	}
+
+	// Tier 3: Auto-generate and persist to default paths.
+	slog.Info("jwt: no keys found, generating new Ed25519 key pair")
+	if err := auth.GenerateKeyPair(cfg.JWTPrivateKeyPath, cfg.JWTPublicKeyPath); err != nil {
+		return nil, fmt.Errorf("generate and persist key pair: %w", err)
+	}
+
+	privPEM, err := os.ReadFile(cfg.JWTPrivateKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read generated private key: %w", err)
+	}
+	pubPEM, err := os.ReadFile(cfg.JWTPublicKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read generated public key: %w", err)
+	}
+
+	mgr, err := auth.NewJWTManagerFromPEM(privPEM, pubPEM)
+	if err != nil {
+		return nil, fmt.Errorf("load generated key pair: %w", err)
+	}
+
+	slog.Info("jwt: generated and persisted new key pair",
+		"private_key", cfg.JWTPrivateKeyPath,
+		"public_key", cfg.JWTPublicKeyPath,
+	)
+	return mgr, nil
 }
