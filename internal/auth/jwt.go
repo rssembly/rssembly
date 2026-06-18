@@ -12,8 +12,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/RSSembly/rssembly/internal/models"
+	"github.com/rssembly/rssembly/internal/models"
 )
+
+// DefaultTokenExpiry is the default JWT lifetime (30 days).
+const DefaultTokenExpiry = 30 * 24 * time.Hour
 
 // Context key for storing authenticated user info in request context.
 type ctxKey string
@@ -37,18 +40,9 @@ type JWTManager struct {
 	publicKey  ed25519.PublicKey
 }
 
-// NewJWTManager loads Ed25519 keys from PEM files and returns a manager.
-func NewJWTManager(privateKeyPath, publicKeyPath string) (*JWTManager, error) {
-	pkData, err := os.ReadFile(privateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("read private key: %w", err)
-	}
-	pubData, err := os.ReadFile(publicKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("read public key: %w", err)
-	}
-
-	privBlock, _ := pem.Decode(pkData)
+// NewJWTManagerFromPEM creates a JWTManager from Ed25519 keys in PEM-encoded bytes.
+func NewJWTManagerFromPEM(pemPriv, pemPub []byte) (*JWTManager, error) {
+	privBlock, _ := pem.Decode(pemPriv)
 	if privBlock == nil || privBlock.Type != "PRIVATE KEY" {
 		return nil, errors.New("invalid private key PEM")
 	}
@@ -61,7 +55,7 @@ func NewJWTManager(privateKeyPath, publicKeyPath string) (*JWTManager, error) {
 		return nil, errors.New("private key is not Ed25519")
 	}
 
-	pubBlock, _ := pem.Decode(pubData)
+	pubBlock, _ := pem.Decode(pemPub)
 	if pubBlock == nil || pubBlock.Type != "PUBLIC KEY" {
 		return nil, errors.New("invalid public key PEM")
 	}
@@ -128,43 +122,45 @@ func (m *JWTManager) VerifyToken(tokenString string) (*AuthenticatedUser, error)
 	}, nil
 }
 
-// GenerateKeyPair creates a new Ed25519 key pair and writes them as PEM files.
-func GenerateKeyPair(privatePath, publicPath string) error {
+// GenerateKeyPairPEM generates a new Ed25519 key pair and returns PEM-encoded bytes.
+func GenerateKeyPairPEM() (privPEM, pubPEM []byte, _ error) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return fmt.Errorf("generate key: %w", err)
+		return nil, nil, fmt.Errorf("generate key: %w", err)
 	}
 
 	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	if err != nil {
-		return fmt.Errorf("marshal private key: %w", err)
+		return nil, nil, fmt.Errorf("marshal private key: %w", err)
 	}
 
 	pubBytes, err := x509.MarshalPKIXPublicKey(priv.Public())
 	if err != nil {
-		return fmt.Errorf("marshal public key: %w", err)
+		return nil, nil, fmt.Errorf("marshal public key: %w", err)
+	}
+
+	privPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+	pubPEM = pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
+
+	return privPEM, pubPEM, nil
+}
+
+// GenerateKeyPair creates a new Ed25519 key pair and writes them as PEM files.
+func GenerateKeyPair(privatePath, publicPath string) error {
+	privPEM, pubPEM, err := GenerateKeyPairPEM()
+	if err != nil {
+		return err
 	}
 
 	if err := os.MkdirAll("data", 0700); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
 
-	privFile, err := os.Create(privatePath)
-	if err != nil {
-		return fmt.Errorf("create private key file: %w", err)
+	if err := os.WriteFile(privatePath, privPEM, 0600); err != nil {
+		return fmt.Errorf("write private key: %w", err)
 	}
-	defer privFile.Close()
-	if err := pem.Encode(privFile, &pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}); err != nil {
-		return fmt.Errorf("write private key PEM: %w", err)
-	}
-
-	pubFile, err := os.Create(publicPath)
-	if err != nil {
-		return fmt.Errorf("create public key file: %w", err)
-	}
-	defer pubFile.Close()
-	if err := pem.Encode(pubFile, &pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes}); err != nil {
-		return fmt.Errorf("write public key PEM: %w", err)
+	if err := os.WriteFile(publicPath, pubPEM, 0644); err != nil {
+		return fmt.Errorf("write public key: %w", err)
 	}
 
 	return nil
