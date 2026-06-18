@@ -35,3 +35,4 @@ docs/superpowers/plans/
 
 # Build
 dist/
+.claude
