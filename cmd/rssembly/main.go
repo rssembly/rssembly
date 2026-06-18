@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
 
-	// ── Database ──────────────────────────────────────────────────────
+	// â”€â”€ Database â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	db, err := database.Connect(ctx, cfg.DatabaseURL)
 	cancel()
@@ -55,7 +55,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── Telemetry ─────────────────────────────────────────────────────
+	// â”€â”€ Telemetry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	shutdownTelemetry, err := telemetry.Init("rssembly", "0.1.0")
 	if err != nil {
 		slog.Error("failed to init telemetry", "error", err)
@@ -64,7 +64,7 @@ func main() {
 	defer shutdownTelemetry()
 	slog.Info("telemetry initialized")
 
-	// ── Auth: JWT Key Resolution ──────────────────────────────────────
+	// â”€â”€ Auth: JWT Key Resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	// Three-tier fallback:
 	//   1. Inline PEM env vars (JWT_PRIVATE_KEY / JWT_PUBLIC_KEY)
 	//   2. PEM files at configured paths
@@ -76,7 +76,7 @@ func main() {
 	}
 	slog.Info("JWT manager initialized")
 
-	// ── Auth Middleware ─────────────────────────────────────────────
+	// â”€â”€ Auth Middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	// The JWT manager handles JWT verification. API key lookup is a stub
 	// until the database layer is fully wired up.
 	authHandler := &compositeAuth{
@@ -87,7 +87,7 @@ func main() {
 	}
 	authMiddleware := middleware.NewAuth(authHandler)
 
-	// ── Router ────────────────────────────────────────────────────────
+	// â”€â”€ Router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	r := chi.NewRouter()
 
 	// Global middleware.
@@ -100,7 +100,7 @@ func main() {
 
 	// Wire all routes via the dedicated registration function.
 	handler.RegisterRoutes(r, &handler.Handlers{
-		Auth:     handler.NewAuthHandler(),
+		Auth:     handler.NewAuthHandler(db, jwtManager),
 		Feeds:    handler.NewFeedHandler(),
 		Articles: handler.NewArticleHandler(),
 		Folders:  handler.NewFolderHandler(),
@@ -108,7 +108,7 @@ func main() {
 		Health:   handler.NewHealthHandler(db),
 	}, authMiddleware, telemetry.MetricsHandler().ServeHTTP)
 
-	// ── Server ────────────────────────────────────────────────────────
+	// â”€â”€ Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	srv := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      r,
