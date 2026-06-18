@@ -1,8 +1,7 @@
-package handler
+﻿package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -24,9 +23,7 @@ func NewHealthHandler(db HealthChecker) *HealthHandler {
 
 // Liveness responds to GET /health — always 200 if the process is alive.
 func (h *HealthHandler) Liveness(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	Respond(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // Readiness responds to GET /ready — 200 when dependencies are reachable, 503 otherwise.
@@ -42,7 +39,5 @@ func (h *HealthHandler) Readiness(w http.ResponseWriter, r *http.Request) {
 		code = http.StatusServiceUnavailable
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"status": status})
+	Respond(w, code, map[string]string{"status": status})
 }
