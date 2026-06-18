@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/RSSembly/rssembly/internal/auth"
+	"github.com/rssembly/rssembly/internal/auth"
 )
 
 // ErrUnauthorized is returned when authentication fails.
@@ -58,6 +58,37 @@ func (a *Auth) Optional(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// RequireScope returns middleware that enforces a specific permission scope.
+// The user must be authenticated AND have a scope that matches the required one.
+func (a *Auth) RequireScope(scope string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := auth.UserFromContext(r.Context())
+			if !ok {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"authentication required"}}`))
+				return
+			}
+
+			// Build scope list from user scopes.
+			granted := make([]auth.Scope, len(user.Scopes))
+			for i, s := range user.Scopes {
+				granted[i] = auth.Scope(s)
+			}
+
+			if !auth.ScopeMatch(auth.Scope(scope), granted) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":{"code":"forbidden","message":"insufficient permissions"}}`))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (a *Auth) authenticate(r *http.Request) (*auth.AuthenticatedUser, error) {
