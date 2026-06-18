@@ -1,72 +1,112 @@
-// Package config manages application configuration via environment variables
-// with an optional YAML overlay file.
 package config
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
 // Config is the canonical configuration struct.
-// Fields are populated from environment variables and optionally overridden by
-// a YAML file pointed to by CONFIG_FILE.
 type Config struct {
-	DatabaseURL        string        `env:"DATABASE_URL" yaml:"database_url"`
-	ServerHost         string        `env:"SERVER_HOST" yaml:"server_host"`
-	ServerPort         int           `env:"SERVER_PORT" yaml:"server_port" envDefault:"8080"`
-	JWTPrivateKeyPath  string        `env:"JWT_PRIVATE_KEY_PATH" yaml:"jwt_private_key_path"`
-	JWTPublicKeyPath   string        `env:"JWT_PUBLIC_KEY_PATH" yaml:"jwt_public_key_path"`
-	CORSAllowedOrigins []string      `env:"CORS_ALLOWED_ORIGINS" yaml:"cors_allowed_origins" envSeparator:","`
-	RateLimitRequests  int           `env:"RATE_LIMIT_REQUESTS" yaml:"rate_limit_requests" envDefault:"100"`
-	RateLimitWindow    time.Duration `env:"RATE_LIMIT_WINDOW" yaml:"rate_limit_window" envDefault:"1m"`
-	DefaultPollInterval time.Duration `env:"DEFAULT_POLL_INTERVAL" yaml:"default_poll_interval" envDefault:"15m"`
-	LogLevel           string        `env:"LOG_LEVEL" yaml:"log_level" envDefault:"info"`
-	ConfigFile         string        `env:"CONFIG_FILE" yaml:"-"`
+	DatabaseURL         string        `env:"DATABASE_URL"           yaml:"database_url"`
+	ServerHost          string        `env:"SERVER_HOST"            yaml:"server_host"`
+	ServerPort          int           `env:"SERVER_PORT"            yaml:"server_port"            envDefault:"8080"`
+	JWTPrivateKeyPath   string        `env:"JWT_PRIVATE_KEY_PATH"    yaml:"jwt_private_key_path"`
+	JWTPublicKeyPath    string        `env:"JWT_PUBLIC_KEY_PATH"     yaml:"jwt_public_key_path"`
+	CORSAllowedOrigins  []string      `env:"CORS_ALLOWED_ORIGINS"   yaml:"cors_allowed_origins"   envSeparator:","`
+	RateLimitRequests   int           `env:"RATE_LIMIT_REQUESTS"    yaml:"rate_limit_requests"    envDefault:"100"`
+	RateLimitWindow     time.Duration `env:"RATE_LIMIT_WINDOW"      yaml:"rate_limit_window"      envDefault:"1m"`
+	DefaultPollInterval time.Duration `env:"DEFAULT_POLL_INTERVAL"  yaml:"default_poll_interval"  envDefault:"15m"`
+	LogLevel            string        `env:"LOG_LEVEL"              yaml:"log_level"              envDefault:"info"`
+	ConfigFile          string        `env:"CONFIG_FILE"            yaml:"-"`
 
-	// Computed fields (set after loading).
-	Addr string `yaml:"-"` // host:port
+	// Computed.
+	Addr string `yaml:"-"`
 }
 
-// Load reads configuration from environment variables and optionally overlays
-// a YAML config file.
+// Load builds a Config by applying sources in priority order:
+//
+//	1. YAML config file (from -config flag or CONFIG_FILE env) — highest
+//	2. .env file from CWD
+//	3. Shell environment variables
+//	4. Default values (envDefault struct tags) — lowest
+//
+// Each source fills fields not set by a higher-priority source.
 func Load() (*Config, error) {
-	cfg := &Config{}
-
-	// First pass: env vars to pick up CONFIG_FILE and default values.
-	if err := env.Parse(cfg); err != nil {
-		return nil, fmt.Errorf("parse env: %w", err)
+	// --- Bootstrap: minimal env parse to find CONFIG_FILE ---
+	boot := &Config{}
+	if err := env.Parse(boot); err != nil {
+		return nil, fmt.Errorf("bootstrap: %w", err)
 	}
 
-	// YAML overlay — if CONFIG_FILE is set, merge it on top of env defaults.
-	if cfg.ConfigFile != "" {
-		data, err := os.ReadFile(cfg.ConfigFile)
+	// --- CLI -config flag overrides CONFIG_FILE env ---
+	if !flag.Parsed() {
+		flag.StringVar(&boot.ConfigFile, "config", boot.ConfigFile, "path to YAML config file")
+		flag.Parse()
+	}
+
+	// --- Parse each source independently ---
+
+	// Source 1: YAML file (highest priority).
+	yamlCfg := &Config{}
+	if boot.ConfigFile != "" {
+		data, err := os.ReadFile(boot.ConfigFile)
 		if err != nil {
-			return nil, fmt.Errorf("read config file %s: %w", cfg.ConfigFile, err)
+			return nil, fmt.Errorf("config file %s: %w", boot.ConfigFile, err)
 		}
-		// Unmarshal into a map first so we can selectively overwrite.
-		overlay := make(map[string]any)
-		if err := yaml.Unmarshal(data, &overlay); err != nil {
-			return nil, fmt.Errorf("parse config file %s: %w", cfg.ConfigFile, err)
+		if err := yaml.Unmarshal(data, yamlCfg); err != nil {
+			return nil, fmt.Errorf("config file %s: %w", boot.ConfigFile, err)
 		}
-		// Re-parse env with the overlay merged so caarlos0/env sets defaults
-		// for anything not in the YAML file. We do this by re-parsing after
-		// writing the YAML-equivalent env vars.
-		//
-		// Simpler approach: just re-parse; env values take precedence.
-		// YAML values only fill in gaps. This is WAI — env vars beat YAML.
-		if err := env.Parse(cfg); err != nil {
-			return nil, fmt.Errorf("parse env (post-yaml): %w", err)
-		}
-		// TODO: proper YAML-overlay merge. The current approach means YAML
-		// cannot override env. For the MVP this is fine; env is primary.
-		_ = overlay
 	}
+
+	// Source 2: .env file. We load with godotenv's Overload so .env beats
+	// existing shell env vars. Then parse env to pick them up.
+	_ = godotenv.Load()
+	_ = godotenv.Overload() // second call overwrites shell env with .env values
+
+	// After Overload, the OS env now has .env values beating shell values.
+	// Parse everything.
+	envCfg := &Config{}
+	if err := env.Parse(envCfg); err != nil {
+		return nil, fmt.Errorf("env parse: %w", err)
+	}
+
+	// --- Merge with priority ---
+	// envCfg already has: defaults + shell env + .env (in order of priority).
+	// YAML beats everything, so overlay YAML on top.
+	mergeNonZero(envCfg, yamlCfg)
+	cfg := envCfg
 
 	cfg.Addr = fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
-
+	cfg.ConfigFile = boot.ConfigFile
 	return cfg, nil
+}
+
+// mergeNonZero copies non-zero exported fields from src into dst.
+// src is higher priority — its non-zero values overwrite dst.
+func mergeNonZero(dst, src *Config) {
+	sv := reflect.ValueOf(src).Elem()
+	dv := reflect.ValueOf(dst).Elem()
+	st := sv.Type()
+
+	for i := 0; i < st.NumField(); i++ {
+		f := st.Field(i)
+		if !f.IsExported() || f.Tag.Get("yaml") == "-" {
+			continue
+		}
+		sf := sv.Field(i)
+		if sf.IsZero() {
+			continue
+		}
+		df := dv.Field(i)
+		if df.CanSet() {
+			df.Set(sf)
+		}
+	}
 }
