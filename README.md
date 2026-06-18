@@ -1,10 +1,10 @@
-# rssembly
+# RSSembly
 
 > Take back control of your RSS reading.
 
 ![rssembly logo](assets/rssembly-logo.svg)
 
-**rssembly** is an open-source, self-hostable RSS reader platform. One backend, multiple clients — web, browser extension, desktop, and mobile — all built with privacy in mind. No tracking, no telemetry, no AI slop.
+**RSSembly** is an open-source, self-hostable RSS reader platform. One backend, multiple clients — web, browser extension, desktop, and mobile — all built with privacy in mind. No tracking, no telemetry, no AI slop.
 
 ## Status
 
