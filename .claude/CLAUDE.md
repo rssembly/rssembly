@@ -1,4 +1,4 @@
-# RSSembly — Project Conventions
+# rssembly — Project Conventions
 
 ## Architecture
 
@@ -9,7 +9,7 @@
 
 ## Code style
 
-- **Go version:** 1.26+, module `github.com/RSSembly/rssembly`.
+- **Go version:** 1.26+, module `github.com/rssembly/rssembly`.
 - **Tests:** Use stdlib `testing` + `github.com/stretchr/testify/require`. Test names: `TestPackage_Behavior`.
 - **Error format:** `{"error":{"code":"snake_case_code","message":"human readable"}}`.
 - **UUIDs:** `github.com/google/uuid` everywhere. All IDs are UUIDv7.
@@ -33,3 +33,23 @@
 - OTel tracer provider + stdout exporter wired in `internal/telemetry/`.
 - `/metrics` endpoint serves Prometheus-scrapable metrics.
 - All HTTP handlers should accept a `context.Context` for trace propagation.
+
+## Handler conventions
+
+- Use `internal/handler/` for HTTP handlers, `internal/repo/` for database queries.
+- Handler structs receive dependencies via constructor injection (DB pool, JWT manager).
+- All handlers use `Respond`/`RespondError` from `internal/handler/response.go` — never write raw JSON.
+- Route registration in `internal/handler/routes.go` with per-route `RequireScope` checks.
+- Tests use `httptest.Server` with a Chi router and real middleware stack.
+
+## Repository conventions
+
+- `internal/repo/` packages own all SQL queries, never in handlers.
+- Methods accept `context.Context` as the first parameter.
+- Return `(T, error)` or `(nil, ErrNotFound)` for missing rows, never `nil, nil`.
+
+## Auth conventions
+
+- Passwords: argon2id hashing via `auth.HashPassword` / `auth.VerifyPassword`.
+- JWT: Ed25519 signing via `auth.JWTManager`.
+- New users get scopes `["feeds:read", "feeds:write", "articles:read", "articles:write", "folders:read", "folders:write"]` by default.
