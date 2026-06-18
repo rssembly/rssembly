@@ -1,0 +1,11 @@
+DROP INDEX IF EXISTS idx_articles_search;
+ALTER TABLE articles DROP COLUMN IF EXISTS search_vector;
+
+DROP TABLE IF EXISTS read_states;
+DROP TYPE IF EXISTS read_state;
+
+DROP TABLE IF EXISTS articles;
+DROP TABLE IF EXISTS feeds;
+DROP TABLE IF EXISTS folders;
+DROP TABLE IF EXISTS api_keys;
+DROP TABLE IF EXISTS users;

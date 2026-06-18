@@ -1,0 +1,725 @@
+﻿openapi: "3.1.0"
+info:
+  title: rssembly API
+  version: "0.1.0"
+  description: |
+    rssembly is an open-source, self-hostable RSS reader platform.
+    One backend, multiple clients — all with privacy in mind.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: Liveness check
+      tags: [System]
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /ready:
+    get:
+      operationId: readiness
+      summary: Readiness check
+      tags: [System]
+      responses:
+        "200":
+          description: Dependencies are reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "503":
+          description: One or more dependencies are unreachable
+
+  /metrics:
+    get:
+      operationId: metrics
+      summary: Prometheus metrics
+      tags: [System]
+      responses:
+        "200":
+          description: Prometheus-formatted metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/auth/register:
+    post:
+      operationId: register
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 2
+                  maxLength: 32
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT for immediate use
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Authenticate and receive a JWT
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/feeds:
+    get:
+      operationId: listFeeds
+      summary: List subscribed feeds
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated list of feeds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedList"
+    post:
+      operationId: addFeed
+      summary: Subscribe to a new feed
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feed_url]
+              properties:
+                feed_url:
+                  type: string
+                  format: uri
+                folder_id:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: Feed added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/feeds/{feedID}:
+    get:
+      operationId: getFeed
+      summary: Get a single feed
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: feedID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Feed detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateFeed
+      summary: Update feed settings
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: feedID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                folder_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                poll_interval:
+                  type: string
+                  example: 30m
+      responses:
+        "200":
+          description: Feed updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteFeed
+      summary: Unsubscribe from a feed
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: feedID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Feed removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/articles:
+    get:
+      operationId: listArticles
+      summary: List articles
+      tags: [Articles]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: feed_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: read_state
+          in: query
+          schema:
+            type: string
+            enum: [unread, read, saved]
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated list of articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleList"
+
+  /api/v1/articles/{articleID}:
+    get:
+      operationId: getArticle
+      summary: Get a single article
+      tags: [Articles]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: articleID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Article detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/articles/{articleID}/read-state:
+    put:
+      operationId: setReadState
+      summary: Mark an article as read/unread/saved
+      tags: [Articles]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: articleID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state:
+                  type: string
+                  enum: [unread, read, saved]
+      responses:
+        "200":
+          description: State updated
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/folders:
+    get:
+      operationId: listFolders
+      summary: List folders
+      tags: [Folders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: List of folders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Folder"
+    post:
+      operationId: createFolder
+      summary: Create a folder
+      tags: [Folders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                parent_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "201":
+          description: Folder created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/folders/{folderID}:
+    put:
+      operationId: updateFolder
+      summary: Update a folder
+      tags: [Folders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: folderID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                parent_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: Folder updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteFolder
+      summary: Delete a folder
+      tags: [Folders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: folderID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Folder removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/users/me:
+    get:
+      operationId: getCurrentUser
+      summary: Get current user profile
+      tags: [Users]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      operationId: updateCurrentUser
+      summary: Update current user profile
+      tags: [Users]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        scopes:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Feed:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        feed_url:
+          type: string
+          format: uri
+        site_url:
+          type: string
+          format: uri
+        icon_url:
+          type: string
+        poll_interval:
+          type: string
+          example: 15m
+        next_poll_at:
+          type: string
+          format: date-time
+        last_fetched_at:
+          type: string
+          format: date-time
+          nullable: true
+        consecutive_failures:
+          type: integer
+        is_paused:
+          type: boolean
+        folder_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    FeedList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Feed"
+        next_cursor:
+          type: string
+        has_more:
+          type: boolean
+
+    Article:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        feed_id:
+          type: string
+          format: uuid
+        guid:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        summary:
+          type: string
+        author:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        read_state:
+          type: string
+          enum: [unread, read, saved]
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ArticleList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Article"
+        next_cursor:
+          type: string
+        has_more:
+          type: boolean
+
+    Folder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

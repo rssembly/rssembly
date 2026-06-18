@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: rssembly
+      POSTGRES_PASSWORD: rssembly
+      POSTGRES_DB: rssembly
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rssembly"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rssembly:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://rssembly:rssembly@postgres:5432/rssembly?sslmode=disable
+      SERVER_PORT: "8080"
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8080
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/data  # for JWT keys
+
+volumes:
+  pgdata:
