@@ -53,8 +53,7 @@ type Authenticator interface {
 
 // AuthUser represents an authenticated WebSocket client.
 type AuthUser struct {
-	UserID  string
-	IsAdmin bool
+	UserID string
 }
 
 // Hub manages connected WebSocket clients and broadcasts events.

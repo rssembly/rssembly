@@ -26,9 +26,9 @@ const ctxKeyUser ctxKey = "user"
 // AuthenticatedUser represents the identity extracted from a verified token
 // or API key.
 type AuthenticatedUser struct {
-	UserID models.UUIDv7
-	IsAdmin bool
-	IsAPIKey bool // true when authenticated via API key (not JWT)
+	UserID   models.UUIDv7
+	Scopes   []string // permission scopes; ["*"] = superadmin
+	IsAPIKey bool     // true when authenticated via API key (not JWT)
 }
 
 // ErrInvalidToken is returned when a JWT or API key cannot be validated.
@@ -74,11 +74,11 @@ func NewJWTManagerFromPEM(pemPriv, pemPub []byte) (*JWTManager, error) {
 // Claims are the custom JWT claims for Rssembly.
 type Claims struct {
 	jwt.RegisteredClaims
-	IsAdmin bool `json:"is_admin"`
+	Scopes []string `json:"scopes"`
 }
 
 // GenerateToken creates a new signed JWT for the given user.
-func (m *JWTManager) GenerateToken(userID models.UUIDv7, isAdmin bool, expiry time.Duration) (string, error) {
+func (m *JWTManager) GenerateToken(userID models.UUIDv7, scopes []string, expiry time.Duration) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -87,7 +87,7 @@ func (m *JWTManager) GenerateToken(userID models.UUIDv7, isAdmin bool, expiry ti
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiry)),
 			Issuer:    "rssembly",
 		},
-		IsAdmin: isAdmin,
+		Scopes: scopes,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
@@ -116,9 +116,14 @@ func (m *JWTManager) VerifyToken(tokenString string) (*AuthenticatedUser, error)
 		return nil, fmt.Errorf("%w: invalid subject: %w", ErrInvalidToken, err)
 	}
 
+	scopes := claims.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
+
 	return &AuthenticatedUser{
-		UserID:  uid,
-		IsAdmin: claims.IsAdmin,
+		UserID: uid,
+		Scopes: scopes,
 	}, nil
 }
 

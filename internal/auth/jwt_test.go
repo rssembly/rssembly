@@ -31,7 +31,7 @@ func TestNewJWTManagerFromPEM_ValidKeys(t *testing.T) {
 	}
 
 	// Round-trip: generate a token and verify it.
-	token, err := mgr.GenerateToken(uuid.Must(uuid.NewV7()), false, DefaultTokenExpiry)
+	token, err := mgr.GenerateToken(uuid.Must(uuid.NewV7()), nil, DefaultTokenExpiry)
 	if err != nil {
 		t.Fatalf("GenerateToken() error: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestNewJWTManagerFromPEM_MismatchedKeys(t *testing.T) {
 		t.Fatalf("NewJWTManagerFromPEM() error: %v", err)
 	}
 
-	token, err := mgr.GenerateToken(uuid.Must(uuid.NewV7()), false, DefaultTokenExpiry)
+	token, err := mgr.GenerateToken(uuid.Must(uuid.NewV7()), nil, DefaultTokenExpiry)
 	if err != nil {
 		t.Fatalf("GenerateToken() error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestGenerateKeyPairPEM_ProducesValidKeys(t *testing.T) {
 		t.Fatalf("NewJWTManagerFromPEM() error: %v", err)
 	}
 
-	token, err := mgr.GenerateToken(uuid.Must(uuid.NewV7()), false, DefaultTokenExpiry)
+	token, err := mgr.GenerateToken(uuid.Must(uuid.NewV7()), nil, DefaultTokenExpiry)
 	if err != nil {
 		t.Fatalf("GenerateToken() error: %v", err)
 	}
