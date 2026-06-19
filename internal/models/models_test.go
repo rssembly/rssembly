@@ -69,3 +69,29 @@ func TestReadState_Values(t *testing.T) {
 		t.Errorf("expected saved, got %q", ReadStateSaved)
 	}
 }
+
+func TestFolder_JSONRoundTrip(t *testing.T) {
+	f := Folder{
+		ID:        NewUUIDv7(),
+		UserID:    NewUUIDv7(),
+		Name:      "Tech Blogs",
+		SortOrder: 1,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded Folder
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if decoded.Name != f.Name {
+		t.Errorf("expected name %q, got %q", f.Name, decoded.Name)
+	}
+	if decoded.SortOrder != 1 {
+		t.Errorf("expected sort_order 1, got %d", decoded.SortOrder)
+	}
+}

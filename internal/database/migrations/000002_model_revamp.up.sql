@@ -6,9 +6,9 @@
 ALTER TABLE users ADD COLUMN username TEXT NOT NULL DEFAULT '';
 UPDATE users SET username = display_name WHERE username = '';
 ALTER TABLE users ALTER COLUMN username DROP DEFAULT;
-CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE deleted_at IS NULL;
 
 ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX idx_users_username ON users (username) WHERE deleted_at IS NULL;
 
 -- ── API Keys ──────────────────────────────────────────────────────
 

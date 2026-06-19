@@ -23,3 +23,9 @@ func ParseUUIDv7(s string) (UUIDv7, error) {
 
 // NilUUIDv7 is the zero-value UUID (all zeros).
 var NilUUIDv7 = uuid.Nil
+
+// UUIDv7FromBytes creates a UUIDv7 from a 16-byte slice (e.g. from pgx scanning BYTEA).
+// Panics if the slice is not exactly 16 bytes.
+func UUIDv7FromBytes(b []byte) UUIDv7 {
+	return uuid.UUID(b)
+}

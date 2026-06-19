@@ -27,6 +27,6 @@ ALTER TABLE api_keys DROP COLUMN IF EXISTS updated_at;
 ALTER TABLE api_keys DROP COLUMN IF EXISTS scopes;
 ALTER TABLE api_keys RENAME COLUMN created_by TO user_id;
 
-ALTER TABLE users DROP COLUMN IF EXISTS deleted_at;
 ALTER TABLE users DROP COLUMN IF EXISTS username;
 DROP INDEX IF EXISTS idx_users_username;
+ALTER TABLE users DROP COLUMN IF EXISTS deleted_at;
