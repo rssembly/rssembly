@@ -2,6 +2,8 @@ package repo
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,6 +12,8 @@ import (
 	"github.com/rssembly/rssembly/internal/database"
 	"github.com/rssembly/rssembly/internal/models"
 )
+
+var seedCounter int64
 
 // testDB starts a PostgreSQL container, runs migrations, and returns a pool
 // ready for use. The container is terminated and pool closed via t.Cleanup.
@@ -48,15 +52,17 @@ func testDB(t *testing.T) *database.Pool {
 	return pool
 }
 
-// seedUser inserts a test user and returns it.
+// seedUser inserts a test user and returns it. Each call generates a unique
+// email and username to avoid unique-constraint collisions within a test.
 func seedUser(t *testing.T, db *database.Pool) *models.User {
 	t.Helper()
 	ctx := context.Background()
+	suffix := atomic.AddInt64(&seedCounter, 1)
 
 	u := &models.User{
 		ID:           models.NewUUIDv7(),
-		Username:     "testuser_" + t.Name(),
-		Email:        t.Name() + "@test.com",
+		Username:     fmt.Sprintf("u_%d", suffix),
+		Email:        fmt.Sprintf("u_%d@test.com", suffix),
 		PasswordHash: "argon2id$v=19$...",
 		Scopes:       []string{"feeds:read", "feeds:write", "articles:read", "articles:write", "folders:read", "folders:write"},
 		CreatedAt:    time.Now(),

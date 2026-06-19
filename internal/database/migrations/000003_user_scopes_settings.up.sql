@@ -1,4 +1,4 @@
-﻿-- Migration 000003: User scopes + global/user settings
+-- Migration 000003: User scopes + global/user settings
 -- Up
 
 -- ── Users: replace is_admin with scopes ───────────────────────────
