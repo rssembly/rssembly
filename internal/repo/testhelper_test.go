@@ -83,12 +83,13 @@ func seedUser(t *testing.T, db *database.Pool) *models.User {
 func seedFeed(t *testing.T, db *database.Pool, userID models.UUIDv7) *models.Feed {
 	t.Helper()
 	ctx := context.Background()
+	suffix := atomic.AddInt64(&seedCounter, 1)
 
 	f := &models.Feed{
 		ID:           models.NewUUIDv7(),
 		CreatedBy:    userID,
 		Title:        "Test Feed " + t.Name(),
-		FeedURL:      "https://" + t.Name() + ".example.com/feed.xml",
+		FeedURL:      fmt.Sprintf("https://feed_%d.example.com/feed.xml", suffix),
 		Status:       models.FeedStatusOK,
 		PollInterval: 15 * time.Minute,
 		NextPollAt:   time.Now(),
