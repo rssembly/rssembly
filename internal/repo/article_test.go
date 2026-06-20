@@ -18,10 +18,10 @@ func TestArticleRepo_CreateAndGet(t *testing.T) {
 	feed := seedFeed(t, db, user.ID)
 
 	article, err := repo.CreateArticle(ctx, &models.Article{
-		FeedID: feed.ID,
-		GUID:   "guid-1",
-		URL:    "https://example.com/article-1",
-		Title:  "Test Article",
+		FeedID:  feed.ID,
+		GUID:    "guid-1",
+		URL:     "https://example.com/article-1",
+		Title:   "Test Article",
 		Content: "<p>Hello world</p>",
 	})
 	require.NoError(t, err)

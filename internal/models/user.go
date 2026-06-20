@@ -7,7 +7,7 @@ type User struct {
 	ID           UUIDv7     `json:"id"`
 	Username     string     `json:"username"`
 	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"` // never exposed in API responses
+	PasswordHash string     `json:"-"`                // never exposed in API responses
 	Scopes       []string   `json:"scopes,omitempty"` // e.g. ["*"] for superadmin
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`

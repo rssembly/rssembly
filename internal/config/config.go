@@ -35,10 +35,10 @@ type Config struct {
 
 // Load builds a Config by applying sources in priority order:
 //
-//	1. YAML config file (from -config flag or CONFIG_FILE env) â€” highest
-//	2. .env file from CWD
-//	3. Shell environment variables
-//	4. Default values (envDefault struct tags) â€” lowest
+//  1. YAML config file (from -config flag or CONFIG_FILE env) â€” highest
+//  2. .env file from CWD
+//  3. Shell environment variables
+//  4. Default values (envDefault struct tags) â€” lowest
 //
 // Each source fills fields not set by a higher-priority source.
 func Load() (*Config, error) {

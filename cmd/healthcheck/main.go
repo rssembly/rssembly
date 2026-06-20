@@ -1,3 +1,6 @@
+// Package main provides a healthcheck binary for Docker/Kubernetes probes.
+// Supports liveness (/health) and readiness (-readiness flag, /ready) checks.
+// Reads SERVER_PORT from the environment to determine which port to check.
 package main
 
 import (
