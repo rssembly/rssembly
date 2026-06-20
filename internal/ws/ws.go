@@ -58,8 +58,9 @@ type AuthUser struct {
 
 // Hub manages connected WebSocket clients and broadcasts events.
 type Hub struct {
-	mu      sync.RWMutex
-	clients map[string]map[*Client]struct{} // userID -> set of connections
+	mu            sync.RWMutex
+	clients       map[string]map[*Client]struct{} // userID -> set of connections
+	authenticator Authenticator
 }
 
 // Client represents a single WebSocket connection.
@@ -75,6 +76,23 @@ func NewHub() *Hub {
 	return &Hub{
 		clients: make(map[string]map[*Client]struct{}),
 	}
+}
+
+// ServeWS is an http.HandlerFunc that upgrades the connection and authenticates
+// using the pre-configured authenticator. Call SetAuthenticator before using this.
+func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
+	if h.authenticator == nil {
+		slog.Error("ws: authenticator not configured")
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	_ = h.HandleConnection(w, r, h.authenticator)
+}
+
+// SetAuthenticator configures the authenticator used by ServeWS.
+// Must be called before any connections are accepted.
+func (h *Hub) SetAuthenticator(auth Authenticator) {
+	h.authenticator = auth
 }
 
 // HandleConnection upgrades an HTTP connection to WebSocket and runs the client loop.
