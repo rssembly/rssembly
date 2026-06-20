@@ -121,7 +121,7 @@ func main() {
 	if pollInterval <= 0 {
 		pollInterval = 30 * time.Second
 	}
-	feedPoller := poller.New(repo.NewFeedRepo(db), repo.NewArticleRepo(db))
+	feedPoller := poller.New(repo.NewFeedRepo(db), repo.NewArticleRepo(db), wsHub)
 	go func() {
 		slog.Info("starting feed poller", "check_interval", pollInterval)
 		ticker := time.NewTicker(pollInterval)
