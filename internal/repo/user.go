@@ -86,3 +86,25 @@ func (r *UserRepo) GetUserByID(ctx context.Context, id models.UUIDv7) (*models.U
 	user.Scopes = scopeSlice
 	return user, nil
 }
+
+// UpdateUser updates mutable user fields and returns the updated user.
+func (r *UserRepo) UpdateUser(ctx context.Context, user *models.User) (*models.User, error) {
+	user.UpdatedAt = time.Now()
+
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users SET
+			username = $1, email = $2, password_hash = $3,
+			scopes = $4, updated_at = $5
+		WHERE id = $6 AND deleted_at IS NULL
+	`, user.Username, user.Email, user.PasswordHash, user.Scopes, user.UpdatedAt, user.ID[:])
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, fmt.Errorf("update user: %w", ErrConflict)
+		}
+		return nil, fmt.Errorf("update user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotFound
+	}
+	return user, nil
+}
