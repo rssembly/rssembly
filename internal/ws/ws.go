@@ -27,16 +27,16 @@ type MessageType string
 
 const (
 	// Client-to-server types.
-	MsgAuth   MessageType = "auth"
-	MsgPing   MessageType = "ping"
+	MsgAuth MessageType = "auth"
+	MsgPing MessageType = "ping"
 
 	// Server-to-client types.
-	MsgAuthOK      MessageType = "auth_ok"
-	MsgAuthError   MessageType = "auth_error"
-	MsgNewArticle  MessageType = "new_article"
-	MsgFeedUpdate  MessageType = "feed_update"
-	MsgPong        MessageType = "pong"
-	MsgError       MessageType = "error"
+	MsgAuthOK     MessageType = "auth_ok"
+	MsgAuthError  MessageType = "auth_error"
+	MsgNewArticle MessageType = "new_article"
+	MsgFeedUpdate MessageType = "feed_update"
+	MsgPong       MessageType = "pong"
+	MsgError      MessageType = "error"
 )
 
 // Message is the envelope for all WebSocket communication.

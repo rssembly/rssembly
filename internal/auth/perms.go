@@ -22,8 +22,8 @@ const (
 	ScopeFoldersDelete = "folders:delete"
 
 	// Users
-	ScopeUsersRead   = "users:read"
-	ScopeUsersWrite  = "users:write"
+	ScopeUsersRead  = "users:read"
+	ScopeUsersWrite = "users:write"
 
 	// Settings
 	ScopeSettingsRead  = "settings:read"

@@ -6,7 +6,7 @@ import "time"
 type Article struct {
 	ID          UUIDv7     `json:"id"`
 	FeedID      UUIDv7     `json:"feed_id"`
-	GUID        string     `json:"guid"`      // feed-provided unique ID, used for dedup
+	GUID        string     `json:"guid"` // feed-provided unique ID, used for dedup
 	URL         string     `json:"url"`
 	Title       string     `json:"title"`
 	Content     string     `json:"content,omitempty"` // full HTML/plain content
