@@ -1,5 +1,5 @@
 .PHONY: build build-all test lint vet clean dev dev-db migrate-up migrate-down \
-        docker-build docker-up docker-down docker-logs fmt help
+        docker-build docker-up docker-down docker-logs fmt hooks help
 
 APP_NAME    := rssembly
 BUILD_DIR   := dist
@@ -47,7 +47,11 @@ vet:
 	go vet ./...
 
 fmt:
-	go fmt ./...
+	golangci-lint fmt ./...
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "✓ Git hooks configured (.githooks/pre-commit)"
 
 clean:
 	rm -rf $(BUILD_DIR) coverage.out coverage.html tmp
