@@ -5,6 +5,7 @@ package poller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/rssembly/rssembly/internal/models"
 	"github.com/rssembly/rssembly/internal/repo"
+	"github.com/rssembly/rssembly/internal/ws"
 )
 
 // Poller fetches due feeds and creates articles.
@@ -23,17 +25,19 @@ type Poller struct {
 	articleRepo *repo.ArticleRepo
 	httpClient  *http.Client
 	fp          *gofeed.Parser
+	hub         *ws.Hub
 }
 
 // New creates a new Poller.
-func New(feedRepo *repo.FeedRepo, articleRepo *repo.ArticleRepo) *Poller {
+func New(feedRepo *repo.FeedRepo, articleRepo *repo.ArticleRepo, hub *ws.Hub) *Poller {
 	return &Poller{
 		feedRepo:    feedRepo,
 		articleRepo: articleRepo,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		fp: gofeed.NewParser(),
+		fp:  gofeed.NewParser(),
+		hub: hub,
 	}
 }
 
@@ -181,6 +185,26 @@ func (p *Poller) pollFeed(ctx context.Context, feed *models.Feed) (articlesCreat
 			continue
 		}
 		created++
+	}
+
+	// Broadcast new articles via WebSocket.
+	if created > 0 {
+		for _, item := range parsed.Items {
+			if item.GUID == "" && item.Link == "" {
+				continue
+			}
+			articlePayload, _ := json.Marshal(map[string]any{
+				"feed_id":    feed.ID.String(),
+				"feed_title": feed.Title,
+				"guid":       item.GUID,
+				"title":      item.Title,
+				"url":        item.Link,
+			})
+			p.hub.BroadcastToUser(feed.CreatedBy.String(), ws.Message{
+				Type:    ws.MsgNewArticle,
+				Payload: articlePayload,
+			})
+		}
 	}
 
 	if _, err := p.feedRepo.UpdateFeed(ctx, feed); err != nil {

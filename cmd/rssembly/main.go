@@ -24,6 +24,7 @@ import (
 	"github.com/rssembly/rssembly/internal/poller"
 	"github.com/rssembly/rssembly/internal/repo"
 	"github.com/rssembly/rssembly/internal/telemetry"
+	"github.com/rssembly/rssembly/internal/ws"
 )
 
 func main() {
@@ -35,14 +36,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Parse log level.
 	var logLevel slog.Level
 	if err := logLevel.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
 		logLevel = slog.LevelInfo
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
 
-	// ── Database ─────────────────────────────────────────────────────────────
+	// Database
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	db, err := database.Connect(ctx, cfg.DatabaseURL)
 	cancel()
@@ -53,13 +53,12 @@ func main() {
 	defer db.Close()
 	slog.Info("connected to database")
 
-	// Run migrations on startup.
 	if err := database.RunMigrations(cfg.DatabaseURL); err != nil {
 		slog.Error("failed to run migrations", "error", err)
 		os.Exit(1)
 	}
 
-	// ── Telemetry ────────────────────────────────────────────────────────────
+	// Telemetry
 	shutdownTelemetry, err := telemetry.Init("rssembly", "0.1.0")
 	if err != nil {
 		slog.Error("failed to init telemetry", "error", err)
@@ -68,11 +67,7 @@ func main() {
 	defer shutdownTelemetry()
 	slog.Info("telemetry initialized")
 
-	// ── Auth: JWT Key Resolution ─────────────────────────────────────────────
-	// Three-tier fallback:
-	//   1. Inline PEM env vars (JWT_PRIVATE_KEY / JWT_PUBLIC_KEY)
-	//   2. PEM files at configured paths
-	//   3. Auto-generate and persist to default paths
+	// Auth: JWT Key Resolution
 	jwtManager, err := initJWT(cfg)
 	if err != nil {
 		slog.Error("failed to initialize JWT manager", "error", err)
@@ -80,7 +75,7 @@ func main() {
 	}
 	slog.Info("JWT manager initialized")
 
-	// ── Auth Middleware ───────────────────────────────────────────────────────
+	// Auth Middleware
 	apiKeyRepo := repo.NewAPIKeyRepo(db)
 	authHandler := &compositeAuth{
 		JWT: jwtManager,
@@ -98,10 +93,12 @@ func main() {
 	}
 	authMiddleware := middleware.NewAuth(authHandler)
 
-	// ── Router ───────────────────────────────────────────────────────────────
-	r := chi.NewRouter()
+	// WebSocket Hub
+	wsHub := ws.NewHub()
+	wsHub.SetAuthenticator(ws.NewJWTAdapter(jwtManager))
 
-	// Global middleware.
+	// Router
+	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logging)
 	r.Use(chiMiddleware.RequestID)
@@ -109,22 +106,22 @@ func main() {
 	rl := middleware.NewRateLimiter(cfg.RateLimitRequests, cfg.RateLimitWindow)
 	r.Use(rl.Middleware)
 
-	// Wire all routes via the dedicated registration function.
 	handler.RegisterRoutes(r, &handler.Handlers{
 		Auth:     handler.NewAuthHandler(db, jwtManager),
 		Feeds:    handler.NewFeedHandler(repo.NewFeedRepo(db)),
-		Articles: handler.NewArticleHandler(repo.NewArticleRepo(db)),
+		Articles: handler.NewArticleHandler(repo.NewArticleRepo(db), wsHub),
 		Folders:  handler.NewFolderHandler(repo.NewFolderRepo(db)),
 		Users:    handler.NewUserHandler(repo.NewUserRepo(db)),
 		Health:   handler.NewHealthHandler(db),
-	}, authMiddleware, telemetry.MetricsHandler().ServeHTTP)
+		WSHub:    wsHub,
+	}, authMiddleware, telemetry.MetricsHandler().ServeHTTP, wsHub)
 
-	// ── Feed Poller ───────────────────────────────────────────────────────────
+	// Feed Poller
 	pollInterval := cfg.DefaultPollInterval
 	if pollInterval <= 0 {
 		pollInterval = 30 * time.Second
 	}
-	feedPoller := poller.New(repo.NewFeedRepo(db), repo.NewArticleRepo(db))
+	feedPoller := poller.New(repo.NewFeedRepo(db), repo.NewArticleRepo(db), wsHub)
 	go func() {
 		slog.Info("starting feed poller", "check_interval", pollInterval)
 		ticker := time.NewTicker(pollInterval)
@@ -149,7 +146,7 @@ func main() {
 		}
 	}()
 
-	// ── Server ───────────────────────────────────────────────────────────────
+	// Server
 	srv := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      r,
@@ -158,7 +155,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown.
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
@@ -183,8 +179,6 @@ func main() {
 	slog.Info("server stopped")
 }
 
-// compositeAuth implements middleware.AuthenticationHandler by combining JWT
-// verification with an API key lookup function.
 type compositeAuth struct {
 	JWT            *auth.JWTManager
 	APIKeyLookupFn func(ctx context.Context, prefix, hash string) (*auth.AuthenticatedUser, error)
@@ -198,9 +192,7 @@ func (c *compositeAuth) APIKeyLookup(ctx context.Context, prefix, hash string) (
 	return c.APIKeyLookupFn(ctx, prefix, hash)
 }
 
-// initJWT resolves JWT signing keys through a three-tier fallback chain.
 func initJWT(cfg *config.Config) (*auth.JWTManager, error) {
-	// Tier 1: Inline PEM from environment variables.
 	if cfg.JWTPrivateKey != "" && cfg.JWTPublicKey != "" {
 		mgr, err := auth.NewJWTManagerFromPEM(
 			[]byte(cfg.JWTPrivateKey),
@@ -213,7 +205,6 @@ func initJWT(cfg *config.Config) (*auth.JWTManager, error) {
 		slog.Warn("jwt: inline PEM env vars present but invalid, falling back", "error", err)
 	}
 
-	// Tier 2: PEM files on disk.
 	if privPEM, err := os.ReadFile(cfg.JWTPrivateKeyPath); err == nil {
 		if pubPEM, err := os.ReadFile(cfg.JWTPublicKeyPath); err == nil {
 			mgr, err := auth.NewJWTManagerFromPEM(privPEM, pubPEM)
@@ -228,7 +219,6 @@ func initJWT(cfg *config.Config) (*auth.JWTManager, error) {
 		}
 	}
 
-	// Tier 3: Auto-generate and persist to default paths.
 	slog.Info("jwt: no keys found, generating new Ed25519 key pair")
 	if err := auth.GenerateKeyPair(cfg.JWTPrivateKeyPath, cfg.JWTPublicKeyPath); err != nil {
 		return nil, fmt.Errorf("generate and persist key pair: %w", err)

@@ -11,7 +11,7 @@ import (
 )
 
 func TestArticleHandler_ListUnauthenticated(t *testing.T) {
-	h := NewArticleHandler(nil)
+	h := NewArticleHandler(nil, nil)
 
 	r := httptest.NewRequest("GET", "/api/v1/articles", nil)
 
@@ -32,7 +32,7 @@ func TestArticleHandler_ListUnauthenticated(t *testing.T) {
 }
 
 func TestArticleHandler_GetInvalidID(t *testing.T) {
-	h := NewArticleHandler(nil)
+	h := NewArticleHandler(nil, nil)
 
 	r := httptest.NewRequest("GET", "/api/v1/articles/bad-id", nil)
 
@@ -54,7 +54,7 @@ func TestArticleHandler_GetInvalidID(t *testing.T) {
 
 func TestArticleHandler_SetReadStateInvalidBody(t *testing.T) {
 	id := "00000000-0000-0000-0000-000000000001"
-	h := NewArticleHandler(nil)
+	h := NewArticleHandler(nil, nil)
 
 	r := httptest.NewRequest("PUT", "/api/v1/articles/"+id+"/read-state", nil)
 	r = r.WithContext(testCtx())
@@ -76,7 +76,7 @@ func TestArticleHandler_SetReadStateInvalidBody(t *testing.T) {
 }
 
 func TestArticleHandler_SetReadStateInvalidID(t *testing.T) {
-	h := NewArticleHandler(nil)
+	h := NewArticleHandler(nil, nil)
 
 	body := `{"state":"read"}`
 	r := httptest.NewRequest("PUT", "/api/v1/articles/bad-id/read-state", strings.NewReader(body))
@@ -101,7 +101,7 @@ func TestArticleHandler_SetReadStateInvalidID(t *testing.T) {
 
 func TestArticleHandler_SetReadStateInvalidStateValue(t *testing.T) {
 	id := "00000000-0000-0000-0000-000000000001"
-	h := NewArticleHandler(nil)
+	h := NewArticleHandler(nil, nil)
 
 	body := `{"state":"invalid_state"}`
 	r := httptest.NewRequest("PUT", "/api/v1/articles/"+id+"/read-state", strings.NewReader(body))

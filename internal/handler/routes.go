@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/rssembly/rssembly/internal/middleware"
+	"github.com/rssembly/rssembly/internal/ws"
 )
 
 // Handlers is a bundle of all HTTP handlers, injected from main.go.
@@ -16,18 +17,19 @@ type Handlers struct {
 	Folders  *FolderHandler
 	Users    *UserHandler
 	Health   *HealthHandler
+	WSHub    *ws.Hub
 }
 
 // RegisterRoutes wires all routes onto the Chi router.
 // Routes at root level (health, ready, metrics) are not authenticated.
 // All /api/v1/* routes use the auth middleware, with per-resource scope checks.
-func RegisterRoutes(r chi.Router, h *Handlers, authMW *middleware.Auth, metricsHandler http.HandlerFunc) {
-	// ── Health / system (no auth) ───────────────────────────────────
+func RegisterRoutes(r chi.Router, h *Handlers, authMW *middleware.Auth, metricsHandler http.HandlerFunc, wsHub *ws.Hub) {
+	// Health / system (no auth)
 	r.Get("/health", h.Health.Liveness)
 	r.Get("/ready", h.Health.Readiness)
 	r.Get("/metrics", metricsHandler)
 
-	// ── API v1 ─────────────────────────────────────────────────────
+	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public auth endpoints (no auth middleware).
 		r.Post("/auth/register", h.Auth.Register)
@@ -66,6 +68,9 @@ func RegisterRoutes(r chi.Router, h *Handlers, authMW *middleware.Auth, metricsH
 				r.With(authMW.RequireScope("users:read")).Get("/me", h.Users.GetProfile)
 				r.With(authMW.RequireScope("users:write")).Put("/me", h.Users.UpdateProfile)
 			})
+
+			// WebSocket
+			r.Get("/ws", wsHub.ServeWS)
 		})
 	})
 }

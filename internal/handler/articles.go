@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -11,19 +12,22 @@ import (
 	"github.com/rssembly/rssembly/internal/auth"
 	"github.com/rssembly/rssembly/internal/models"
 	"github.com/rssembly/rssembly/internal/repo"
+	"github.com/rssembly/rssembly/internal/ws"
 )
 
 // ArticleHandler handles article listing and read state.
 type ArticleHandler struct {
 	articleRepo *repo.ArticleRepo
 	validate    *validator.Validate
+	hub         *ws.Hub
 }
 
 // NewArticleHandler creates an ArticleHandler.
-func NewArticleHandler(articleRepo *repo.ArticleRepo) *ArticleHandler {
+func NewArticleHandler(articleRepo *repo.ArticleRepo, hub *ws.Hub) *ArticleHandler {
 	return &ArticleHandler{
 		articleRepo: articleRepo,
 		validate:    validator.New(),
+		hub:         hub,
 	}
 }
 
@@ -121,6 +125,16 @@ func (h *ArticleHandler) SetReadState(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "internal", "failed to set read state")
 		return
 	}
+
+	// Broadcast read state change to other clients of this user.
+	statePayload, _ := json.Marshal(map[string]any{
+		"article_id": articleID.String(),
+		"state":      req.State,
+	})
+	h.hub.BroadcastToUser(user.UserID.String(), ws.Message{
+		Type:    ws.MsgFeedUpdate,
+		Payload: statePayload,
+	})
 
 	Respond(w, http.StatusOK, map[string]string{"status": "ok"})
 }
