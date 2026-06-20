@@ -161,12 +161,16 @@ func (r *FeedRepo) UpdateFeed(ctx context.Context, feed *models.Feed) (*models.F
 			poll_interval = $5, status = $6, is_paused = $7,
 			max_entries = $8, folder_id = $9,
 			username = $10, password_encrypted = $11,
-			updated_at = $12
-		WHERE id = $13 AND deleted_at IS NULL
+			next_poll_at = $12, last_fetched_at = $13,
+			etag = $14, last_modified = $15,
+			updated_at = $16
+		WHERE id = $17 AND deleted_at IS NULL
 	`, feed.Title, feed.Description, feed.SiteURL, feed.IconURL,
 		feed.PollInterval, string(feed.Status), feed.IsPaused,
 		feed.MaxEntries, folderIDBytes,
 		feed.Username, feed.PasswordEncrypted,
+		feed.NextPollAt, feed.LastFetchedAt,
+		feed.ETag, feed.LastModified,
 		feed.UpdatedAt, feed.ID[:])
 	if err != nil {
 		return nil, fmt.Errorf("update feed: %w", err)
@@ -187,6 +191,47 @@ func (r *FeedRepo) DeleteFeed(ctx context.Context, id models.UUIDv7) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ListFeedsDueForPoll returns all non-deleted, non-paused feeds whose
+// next_poll_at is in the past, ordered by next_poll_at ASC.
+// limit caps how many feeds to poll in one batch.
+func (r *FeedRepo) ListFeedsDueForPoll(ctx context.Context, limit int) ([]*models.Feed, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT f.id, f.created_by, f.title, f.description, f.feed_url, f.site_url, f.icon_url,
+		       f.poll_interval, f.next_poll_at, f.last_fetched_at, f.status,
+		       f.etag, f.last_modified, f.is_paused,
+		       f.max_entries, f.folder_id, f.username, f.password_encrypted,
+		       f.created_at, f.updated_at, f.deleted_at
+		FROM feeds f
+		WHERE f.deleted_at IS NULL
+		  AND f.status != 'paused'
+		  AND f.next_poll_at <= now()
+		ORDER BY f.next_poll_at ASC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list feeds due for poll: %w", err)
+	}
+	defer rows.Close()
+
+	var feeds []*models.Feed
+	for rows.Next() {
+		f := &models.Feed{}
+		if err := scanFeedRow(rows, f); err != nil {
+			return nil, fmt.Errorf("scan feed: %w", err)
+		}
+		feeds = append(feeds, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration: %w", err)
+	}
+
+	return feeds, nil
 }
 
 // --- scan helpers ---
