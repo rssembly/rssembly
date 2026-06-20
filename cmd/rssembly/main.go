@@ -109,7 +109,7 @@ func main() {
 	handler.RegisterRoutes(r, &handler.Handlers{
 		Auth:     handler.NewAuthHandler(db, jwtManager),
 		Feeds:    handler.NewFeedHandler(repo.NewFeedRepo(db)),
-		Articles: handler.NewArticleHandler(repo.NewArticleRepo(db)),
+		Articles: handler.NewArticleHandler(repo.NewArticleRepo(db), wsHub),
 		Folders:  handler.NewFolderHandler(repo.NewFolderRepo(db)),
 		Users:    handler.NewUserHandler(repo.NewUserRepo(db)),
 		Health:   handler.NewHealthHandler(db),
