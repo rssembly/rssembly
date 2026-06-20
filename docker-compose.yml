@@ -14,6 +14,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
   rssembly:
     build: .
@@ -28,7 +29,14 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./data:/data  # for JWT keys
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
 
 volumes:
   pgdata:

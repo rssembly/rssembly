@@ -1,0 +1,33 @@
+# Git
+.git
+.gitattributes
+.gitignore
+
+# Environment (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# Data directory (JWT keys, runtime state)
+data/
+
+# Build artifacts
+tmp/
+dist/
+*.out
+*.test
+*.test.exe
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Documentation / plans
+docs/superpowers/plans/
+
+# CI / tooling
+.claude
