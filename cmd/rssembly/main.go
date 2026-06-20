@@ -1,3 +1,5 @@
+// Package main is the RSSembly server entrypoint. It wires config, database,
+// JWT auth, telemetry, all HTTP handlers, and starts the HTTP server.
 package main
 
 import (
