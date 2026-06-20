@@ -206,3 +206,46 @@ func TestFeedRepo_UpdateNotFound(t *testing.T) {
 	_, err := repo.UpdateFeed(ctx, feed)
 	require.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestFeedRepo_ListFeedsDueForPoll(t *testing.T) {
+	db := testDB(t)
+	repo := NewFeedRepo(db)
+	ctx := context.Background()
+
+	user := seedUser(t, db)
+
+	// Feed with past next_poll_at — should be due
+	past, err := repo.CreateFeed(ctx, &models.Feed{
+		CreatedBy: user.ID,
+		FeedURL:   "https://past.example.com/feed.xml",
+	})
+	require.NoError(t, err)
+	past.NextPollAt = time.Now().Add(-1 * time.Hour)
+	_, err = repo.UpdateFeed(ctx, past)
+	require.NoError(t, err)
+
+	// Feed with future next_poll_at — should NOT be due
+	future, err := repo.CreateFeed(ctx, &models.Feed{
+		CreatedBy: user.ID,
+		FeedURL:   "https://future.example.com/feed.xml",
+	})
+	require.NoError(t, err)
+	future.NextPollAt = time.Now().Add(1 * time.Hour)
+	_, err = repo.UpdateFeed(ctx, future)
+	require.NoError(t, err)
+
+	// Paused feed — should NOT be due
+	paused, err := repo.CreateFeed(ctx, &models.Feed{
+		CreatedBy: user.ID,
+		FeedURL:   "https://paused.example.com/feed.xml",
+	})
+	require.NoError(t, err)
+	paused.Status = models.FeedStatusPaused
+	_, err = repo.UpdateFeed(ctx, paused)
+	require.NoError(t, err)
+
+	due, err := repo.ListFeedsDueForPoll(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, due, 1)
+	require.Equal(t, past.ID, due[0].ID)
+}

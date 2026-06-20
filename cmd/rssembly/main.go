@@ -21,6 +21,7 @@ import (
 	"github.com/rssembly/rssembly/internal/database"
 	"github.com/rssembly/rssembly/internal/handler"
 	"github.com/rssembly/rssembly/internal/middleware"
+	"github.com/rssembly/rssembly/internal/poller"
 	"github.com/rssembly/rssembly/internal/repo"
 	"github.com/rssembly/rssembly/internal/telemetry"
 )
@@ -117,6 +118,36 @@ func main() {
 		Users:    handler.NewUserHandler(repo.NewUserRepo(db)),
 		Health:   handler.NewHealthHandler(db),
 	}, authMiddleware, telemetry.MetricsHandler().ServeHTTP)
+
+	// ── Feed Poller ───────────────────────────────────────────────────────────
+	pollInterval := cfg.DefaultPollInterval
+	if pollInterval <= 0 {
+		pollInterval = 30 * time.Second
+	}
+	feedPoller := poller.New(repo.NewFeedRepo(db), repo.NewArticleRepo(db))
+	go func() {
+		slog.Info("starting feed poller", "check_interval", pollInterval)
+		ticker := time.NewTicker(pollInterval)
+		defer ticker.Stop()
+
+		feeds, articles, err := feedPoller.PollOnce(context.Background())
+		if err != nil {
+			slog.Warn("initial poll failed", "error", err)
+		} else {
+			slog.Info("initial poll complete", "feeds", feeds, "articles", articles)
+		}
+
+		for range ticker.C {
+			feeds, articles, err := feedPoller.PollOnce(context.Background())
+			if err != nil {
+				slog.Warn("poll cycle failed", "error", err)
+				continue
+			}
+			if feeds > 0 || articles > 0 {
+				slog.Info("poll cycle complete", "feeds", feeds, "articles", articles)
+			}
+		}
+	}()
 
 	// ── Server ───────────────────────────────────────────────────────────────
 	srv := &http.Server{
