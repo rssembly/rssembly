@@ -19,6 +19,7 @@ import (
 	"github.com/rssembly/rssembly/internal/database"
 	"github.com/rssembly/rssembly/internal/handler"
 	"github.com/rssembly/rssembly/internal/middleware"
+	"github.com/rssembly/rssembly/internal/repo"
 	"github.com/rssembly/rssembly/internal/telemetry"
 )
 
@@ -38,7 +39,7 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
 
-	// â”€â”€ Database â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Database ─────────────────────────────────────────────────────────────
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	db, err := database.Connect(ctx, cfg.DatabaseURL)
 	cancel()
@@ -55,7 +56,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// â”€â”€ Telemetry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Telemetry ────────────────────────────────────────────────────────────
 	shutdownTelemetry, err := telemetry.Init("rssembly", "0.1.0")
 	if err != nil {
 		slog.Error("failed to init telemetry", "error", err)
@@ -64,7 +65,7 @@ func main() {
 	defer shutdownTelemetry()
 	slog.Info("telemetry initialized")
 
-	// â”€â”€ Auth: JWT Key Resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Auth: JWT Key Resolution ─────────────────────────────────────────────
 	// Three-tier fallback:
 	//   1. Inline PEM env vars (JWT_PRIVATE_KEY / JWT_PUBLIC_KEY)
 	//   2. PEM files at configured paths
@@ -76,18 +77,25 @@ func main() {
 	}
 	slog.Info("JWT manager initialized")
 
-	// â”€â”€ Auth Middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-	// The JWT manager handles JWT verification. API key lookup is a stub
-	// until the database layer is fully wired up.
+	// ── Auth Middleware ───────────────────────────────────────────────────────
+	apiKeyRepo := repo.NewAPIKeyRepo(db)
 	authHandler := &compositeAuth{
 		JWT: jwtManager,
 		APIKeyLookupFn: func(ctx context.Context, prefix, hash string) (*auth.AuthenticatedUser, error) {
-			return nil, errors.New("API key lookup not yet implemented")
+			key, err := apiKeyRepo.GetAPIKeyByPrefix(ctx, prefix)
+			if err != nil {
+				return nil, fmt.Errorf("api key lookup: %w", err)
+			}
+			return &auth.AuthenticatedUser{
+				UserID:   key.CreatedBy,
+				Scopes:   key.Scopes,
+				IsAPIKey: true,
+			}, nil
 		},
 	}
 	authMiddleware := middleware.NewAuth(authHandler)
 
-	// â”€â”€ Router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Router ───────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 
 	// Global middleware.
@@ -101,14 +109,14 @@ func main() {
 	// Wire all routes via the dedicated registration function.
 	handler.RegisterRoutes(r, &handler.Handlers{
 		Auth:     handler.NewAuthHandler(db, jwtManager),
-		Feeds:    handler.NewFeedHandler(),
-		Articles: handler.NewArticleHandler(),
-		Folders:  handler.NewFolderHandler(),
-		Users:    handler.NewUserHandler(),
+		Feeds:    handler.NewFeedHandler(repo.NewFeedRepo(db)),
+		Articles: handler.NewArticleHandler(repo.NewArticleRepo(db)),
+		Folders:  handler.NewFolderHandler(repo.NewFolderRepo(db)),
+		Users:    handler.NewUserHandler(repo.NewUserRepo(db)),
 		Health:   handler.NewHealthHandler(db),
 	}, authMiddleware, telemetry.MetricsHandler().ServeHTTP)
 
-	// â”€â”€ Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// ── Server ───────────────────────────────────────────────────────────────
 	srv := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      r,
